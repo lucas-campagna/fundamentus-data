@@ -2,7 +2,6 @@ import concurrent.futures as cf
 import pandas as pd
 
 import requests
-from bs4 import BeautifulSoup
 
 from .page import get_page
 from .utils import build_rawdata
@@ -35,14 +34,20 @@ def get_dupont(asset):
         futures = [executor.submit(get_dupont_request, headers=headers, data=data, tipo_grafico=tipo_grafico) for tipo_grafico in graphics]
         for future in cf.as_completed(futures):
             name, dupont_data = future.result()
-            dupont[name] = pd.Series(dupont_data.dadosgrafico, index=pd.to_datetime(dupont_data.datas_data_tip.str.split().str.get(0), format='%m/%Y'), name=name)
+            dupont[name] = dupont_data
+            # pd.to_datetime(dupont_data.datasfim_data_tip, format='%m/%Y')
+            # pd.Series(dupont_data.dadosgrafico, index=pd.to_datetime(dupont_data.datasfim_data_tip, format='%m/%Y'), name=name)
+            # dupont[name] = pd.Series(dupont_data.dadosgrafico, index=pd.to_datetime(dupont_data.datas_data_tip.str.split().str.get(0), format='%m/%Y'), name=name)
+            # dupont[name] = pd.Series(dupont_data.dadosgrafico, index=pd.to_datetime(dupont_data.datasfim_data_tip, format='%m/%Y'), name=name)
+    # return dupont
     df_dupont = pd.DataFrame()
     for d in dupont.values():
         df_dupont = df_dupont.join(d, how='outer')
+    # return df_dupont
     # complete missing data
-    na_idx = df_dupont.ALAVANCAGEM_FINANCEIRA_ANUAL.isna()
-    df_dupont['ALAVANCAGEM_FINANCEIRA_ANUAL'] = df_dupont.loc[na_idx,'RETORNO_PL_ANUAL']/df_dupont.loc[na_idx,'RETORNO_ATIVO_ANUAL']
-    df_dupont.ffill(inplace=True)
+    # na_idx = df_dupont.ALAVANCAGEM_FINANCEIRA_ANUAL.isna()
+    # df_dupont['ALAVANCAGEM_FINANCEIRA_ANUAL'] = df_dupont.loc[na_idx,'RETORNO_PL_ANUAL']/df_dupont.loc[na_idx,'RETORNO_ATIVO_ANUAL']
+    # df_dupont.ffill(inplace=True)
     return df_dupont
 
 def get_dupont_request(headers, data, tipo_grafico):
@@ -51,8 +56,8 @@ def get_dupont_request(headers, data, tipo_grafico):
     assert(response.status_code == 200)
     dupont = pd.DataFrame(response.json())
     dupont['dadosgrafico'] = dupont['dadosgrafico'].astype(float)
-    dupont.index = pd.to_datetime(dupont.datas_data_tip.str.split().str.get(0), format='%m/%Y')
-    return tipo_grafico, dupont
+    dupont.index = pd.to_datetime(dupont.datasfim_data_tip, format='%m/%Y')
+    return tipo_grafico, dupont['dadosgrafico'].rename(tipo_grafico, inplace=True)
 
 get_dupont.headers = {
     'authority': 'www.investsite.com.br',
