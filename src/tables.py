@@ -3,22 +3,34 @@ from bs4 import BeautifulSoup
 import concurrent.futures as cf
 import logging
 import pandas as pd
+import re
 
 from .page import get_page
 from .utils import build_rawdata
 
-def get_tables(asset):
+def get_tables_name(asset):
+    page, global_vars = get_page(asset)
+    return [
+        p.select_one('caption').text
+        for p in page.select(get_tables_name.CSS_SELECTOR_ALL_TABLES)
+    ]
+get_tables_name.CSS_SELECTOR_ALL_TABLES = 'table:has(> caption)'
+
+
+def get_tables(asset, tables=None):
+    match_tables = re.compile(tables) if tables is not None else None
     page, global_vars = get_page(asset)
     tables = {}
     # get static tables
     static_table_pages = page.select(get_tables.CSS_SELECTOR_STATIC_TABLES)
     for table in static_table_pages:
         table_name = table.select_one('caption').text
-        logging.debug(table_name)
-        current_table = tables[table_name] = {}
-        for name, value in zip(table.select('.esquerda'), table.select('.direita')):
-            current_table[name.text] = value.text
-        tables[table_name] = pd.Series(current_table)
+        if match_tables is None or match_tables.match(table_name):
+            logging.debug(table_name)
+            current_table = tables[table_name] = {}
+            for name, value in zip(table.select('.esquerda'), table.select('.direita')):
+                current_table[name.text] = value.text
+            tables[table_name] = pd.Series(current_table)
     # get dynamic tables
     dynamic_table_pages = page.select(get_tables.CSS_SELECTOR_DYNAMIC_TABLES)
     num_threads = len(dynamic_table_pages)
@@ -26,6 +38,7 @@ def get_tables(asset):
         futures = [
             executor.submit(request_dynamic_table_data, table_page, **global_vars)
             for table_page in dynamic_table_pages
+            if match_tables is None or match_tables.match(table_page.select_one('caption').text)
         ]
         for future in cf.as_completed(futures):
             table_name, table = future.result()
